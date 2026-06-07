@@ -1,6 +1,6 @@
 # ===========================================================================
 # Coolify 部署 (可选): 在节点本机从源码构建 —— 仅用于性能足够的机器.
-# 弱节点请用默认的 docker-compose.yml (预编译镜像).
+# 弱节点请用默认的 docker-compose.yaml (预编译镜像).
 # Coolify 资源选 "Docker Compose" 并指定本文件, 或直接用 Dockerfile 构建包.
 # ===========================================================================
 services:
@@ -18,22 +18,19 @@ services:
     network_mode: host
 
     environment:
-      LOG_LEVEL: ${LOG_LEVEL:-info}
-      CORE_TYPE: ${CORE_TYPE:-xray}
+      # ── 必填 ──
       API_HOST: ${API_HOST}
       API_KEY: ${API_KEY}
       NODE_ID: ${NODE_ID}
       NODE_TYPE: ${NODE_TYPE}
-      API_TIMEOUT: ${API_TIMEOUT:-30}
-      LISTEN_IP: ${LISTEN_IP:-0.0.0.0}
-      SEND_IP: ${SEND_IP:-0.0.0.0}
-      DEVICE_ONLINE_MIN_TRAFFIC: ${DEVICE_ONLINE_MIN_TRAFFIC:-100}
+      # ── 可选 (有默认值) ──
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      CORE_TYPE: ${CORE_TYPE:-xray}
       CERT_MODE: ${CERT_MODE:-none}
-      CERT_DOMAIN: ${CERT_DOMAIN:-}
-      CERT_PROVIDER: ${CERT_PROVIDER:-}
-      CERT_EMAIL: ${CERT_EMAIL:-}
-      DNSENV_CF_DNS_API_TOKEN: ${DNSENV_CF_DNS_API_TOKEN:-}
-      HEALTHCHECK_PORT: ${HEALTHCHECK_PORT:-}
+      # ── 以下变量按需在 Coolify 面板手动添加, 不在此固定 ──
+      # CERT_DOMAIN / CERT_PROVIDER / CERT_EMAIL
+      # DNSENV_CF_DNS_API_TOKEN
+      # DNS_SERVERS / HEALTHCHECK_PORT
 
     volumes:
       - cert-data:/etc/nanako-node/cert

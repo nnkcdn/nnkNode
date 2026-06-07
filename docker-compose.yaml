@@ -14,25 +14,20 @@ services:
     network_mode: host
 
     environment:
+      # ── 必填 ──
+      API_HOST: ${API_HOST}                      # 面板地址
+      API_KEY: ${API_KEY}                        # 节点通信密钥
+      NODE_ID: ${NODE_ID}                        # 节点ID (数字)
+      NODE_TYPE: ${NODE_TYPE}                    # vmess/vless/trojan/shadowsocks/hysteria2/tuic
+      # ── 可选 (有默认值) ──
       LOG_LEVEL: ${LOG_LEVEL:-info}
       CORE_TYPE: ${CORE_TYPE:-xray}              # xray / sing / hysteria2
-      API_HOST: ${API_HOST}                      # 必填: 面板地址
-      API_KEY: ${API_KEY}                        # 必填: 节点通信密钥
-      NODE_ID: ${NODE_ID}                        # 必填: 节点ID (数字)
-      NODE_TYPE: ${NODE_TYPE}                    # 必填: vmess/vless/trojan/shadowsocks/hysteria2/tuic
-      API_TIMEOUT: ${API_TIMEOUT:-30}
-      LISTEN_IP: ${LISTEN_IP:-0.0.0.0}
-      SEND_IP: ${SEND_IP:-0.0.0.0}
-      DEVICE_ONLINE_MIN_TRAFFIC: ${DEVICE_ONLINE_MIN_TRAFFIC:-100}
-      # ── TLS 证书 ──
       CERT_MODE: ${CERT_MODE:-none}              # none/file/dns/http
-      CERT_DOMAIN: ${CERT_DOMAIN:-}
-      CERT_PROVIDER: ${CERT_PROVIDER:-}          # dns 模式: cloudflare/alidns/...
-      CERT_EMAIL: ${CERT_EMAIL:-}
-      # DNS-01 自动签发的 provider token (示例 cloudflare). 按需增删:
-      DNSENV_CF_DNS_API_TOKEN: ${DNSENV_CF_DNS_API_TOKEN:-}
-      # ── 健康检查可选端口探测 ──
-      HEALTHCHECK_PORT: ${HEALTHCHECK_PORT:-}
+      # ── 以下变量按需在 Coolify 面板手动添加, 不在此固定 ──
+      # CERT_DOMAIN / CERT_PROVIDER / CERT_EMAIL  → 需要 TLS 证书时添加
+      # DNSENV_CF_DNS_API_TOKEN                   → DNS-01 签发时添加
+      # DNS_SERVERS                               → 自定义 DNS 时添加
+      # HEALTHCHECK_PORT                          → 端口健康检查时添加
 
     volumes:
       - cert-data:/etc/nanako-node/cert          # 自动签发的证书持久化
