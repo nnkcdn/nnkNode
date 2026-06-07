@@ -1,0 +1,54 @@
+# ===========================================================================
+# Coolify 部署 (默认): 使用 GHCR 预编译镜像 —— 弱性能节点零编译, 直接拉取运行.
+# 在 Coolify 资源里选 "Docker Compose", 指向本仓库, 然后到 Environment Variables
+# 面板填写下面用到的变量 (API_HOST / API_KEY / NODE_ID / NODE_TYPE ...).
+# ===========================================================================
+services:
+  nanako-node:
+    image: ghcr.io/nanako1900/nodedeploy:latest
+    container_name: nanako-node
+    restart: unless-stopped
+
+    # 代理节点: host 网络最省心 (任意端口 + Hysteria2/TUIC 的 UDP 直通)
+    network_mode: host
+
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      CORE_TYPE: ${CORE_TYPE:-xray}              # xray / sing / hysteria2
+      API_HOST: ${API_HOST}                      # 必填: 面板地址
+      API_KEY: ${API_KEY}                        # 必填: 节点通信密钥
+      NODE_ID: ${NODE_ID}                        # 必填: 节点ID (数字)
+      NODE_TYPE: ${NODE_TYPE}                    # 必填: vmess/vless/trojan/shadowsocks/hysteria2/tuic
+      API_TIMEOUT: ${API_TIMEOUT:-30}
+      LISTEN_IP: ${LISTEN_IP:-0.0.0.0}
+      SEND_IP: ${SEND_IP:-0.0.0.0}
+      DEVICE_ONLINE_MIN_TRAFFIC: ${DEVICE_ONLINE_MIN_TRAFFIC:-100}
+      # ── TLS 证书 ──
+      CERT_MODE: ${CERT_MODE:-none}              # none/file/dns/http
+      CERT_DOMAIN: ${CERT_DOMAIN:-}
+      CERT_PROVIDER: ${CERT_PROVIDER:-}          # dns 模式: cloudflare/alidns/...
+      CERT_EMAIL: ${CERT_EMAIL:-}
+      # DNS-01 自动签发的 provider token (示例 cloudflare). 按需增删:
+      DNSENV_CF_DNS_API_TOKEN: ${DNSENV_CF_DNS_API_TOKEN:-}
+      # ── 健康检查可选端口探测 ──
+      HEALTHCHECK_PORT: ${HEALTHCHECK_PORT:-}
+
+    volumes:
+      - cert-data:/etc/nanako-node/cert          # 自动签发的证书持久化
+
+    # 镜像已自带 HEALTHCHECK; 这里显式声明便于 Coolify 读取/覆盖
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/healthcheck.sh"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  cert-data:

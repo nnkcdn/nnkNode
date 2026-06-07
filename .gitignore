@@ -1,0 +1,10 @@
+# 本地运行产物
+*.log
+.env
+config.json
+
+# 工具/harness 状态
+.omc/
+.DS_Store
+
+# 不忽略 src/ (vendored V2bX 源码, CI 需要它构建)

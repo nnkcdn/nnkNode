@@ -1,0 +1,9 @@
+.git
+.github
+*.md
+docker-compose*.yml
+.env
+.env.*
+src/.git
+src/test_data
+src/example
