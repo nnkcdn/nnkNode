@@ -45,15 +45,56 @@ CERT_KEY_FILE="${CERT_KEY_FILE:-$CONFIG_DIR/cert/private.key}"
 CERT_PROVIDER="${CERT_PROVIDER:-}"
 CERT_EMAIL="${CERT_EMAIL:-}"
 REJECT_UNKNOWN_SNI="${REJECT_UNKNOWN_SNI:-false}"
+DNS_SERVERS="${DNS_SERVERS:-}"
+
+# ── DNS 配置 (按内核生成对应格式) ──
+if [ -n "$DNS_SERVERS" ]; then
+  DNS_DIR="$CONFIG_DIR/dns"
+  mkdir -p "$DNS_DIR"
+  case "$CORE_TYPE" in
+    xray)
+      # xray DNS 格式: {"servers":["8.8.8.8","1.1.1.1"],"tag":"dns_inbound"}
+      XRAY_DNS_FILE="$DNS_DIR/dns.json"
+      printf '%s' "$DNS_SERVERS" | tr ',' '\n' | jq -R . | jq -s '{servers:.,tag:"dns_inbound"}' > "$XRAY_DNS_FILE"
+      echo "[entrypoint] 已生成 xray DNS 配置: $DNS_SERVERS"
+      ;;
+    sing)
+      # sing-box OriginalPath 格式: 完整 options, 只填 dns 段
+      # 支持: 纯 IP (自动加 udp://) 或带协议前缀 (https:// tls:// quic:// tcp:// udp://)
+      SING_DNS_FILE="$DNS_DIR/sing-dns.json"
+      idx=0
+      printf '%s' "$DNS_SERVERS" | tr ',' '\n' | while IFS= read -r addr; do
+        idx=$((idx+1))
+        case "$addr" in
+          https://*|tls://*|quic://*|tcp://*|udp://*) printf '%s\n' "$addr" ;;
+          *) printf 'udp://%s\n' "$addr" ;;
+        esac
+      done | jq -R --argjson idx 0 \
+        '{ tag: ("dns-\(input_line_number)"), address: . }' | \
+        jq -s '{dns:{servers:.,rules:[],independent_cache:true}}' > "$SING_DNS_FILE"
+      echo "[entrypoint] 已生成 sing DNS 配置: $DNS_SERVERS"
+      ;;
+  esac
+fi
 
 # ── 内核对象 ──
 case "$CORE_TYPE" in
   xray)
-    core=$(jq -n --arg lvl "${XRAY_LOG_LEVEL:-warning}" \
-      '{Type:"xray", Log:{Level:$lvl}, AssetPath:"/usr/share/nanako-node/"}') ;;
+    if [ -n "$DNS_SERVERS" ]; then
+      core=$(jq -n --arg lvl "${XRAY_LOG_LEVEL:-warning}" --arg dp "$XRAY_DNS_FILE" \
+        '{Type:"xray", Log:{Level:$lvl}, AssetPath:"/usr/share/nanako-node/", DnsConfigPath:$dp}')
+    else
+      core=$(jq -n --arg lvl "${XRAY_LOG_LEVEL:-warning}" \
+        '{Type:"xray", Log:{Level:$lvl}, AssetPath:"/usr/share/nanako-node/"}')
+    fi ;;
   sing)
-    core=$(jq -n --arg lvl "${SING_LOG_LEVEL:-error}" \
-      '{Type:"sing", Log:{Level:$lvl, Timestamp:true}}') ;;
+    if [ -n "$DNS_SERVERS" ]; then
+      core=$(jq -n --arg lvl "${SING_LOG_LEVEL:-error}" --arg op "$SING_DNS_FILE" \
+        '{Type:"sing", Log:{Level:$lvl, Timestamp:true}, OriginalPath:$op}')
+    else
+      core=$(jq -n --arg lvl "${SING_LOG_LEVEL:-error}" \
+        '{Type:"sing", Log:{Level:$lvl, Timestamp:true}}')
+    fi ;;
   hysteria2)
     core=$(jq -n '{Type:"hysteria2"}') ;;
   *) echo "[entrypoint] 未知 CORE_TYPE=$CORE_TYPE (应为 xray/sing/hysteria2)"; exit 1 ;;

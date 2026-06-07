@@ -160,7 +160,31 @@ DNS provider token 用 `DNSENV_` 前缀注入(自动去前缀传给 ACME),常见
 
 签发的证书持久化在 `cert-data` 卷。
 
-## 五、运维命令
+## 五、DNS 配置（可选）
+
+默认使用节点系统 DNS。如果系统 DNS 不稳定或延迟高，可通过环境变量指定：
+
+```env
+DNS_SERVERS=8.8.8.8,1.1.1.1
+```
+
+逗号分隔多个 DNS 服务器地址。entrypoint 会自动按内核类型生成对应格式的 DNS 配置：
+
+| `CORE_TYPE` | 生成方式 |
+|---|---|
+| `xray` | 写入 `DnsConfigPath`，xray 原生 DNS 模块接管解析 |
+| `sing` | 写入 `OriginalPath`，sing-box DNS 模块接管解析 |
+| `hysteria2` | 不支持（使用系统 DNS） |
+
+常用组合：
+
+| 场景 | `DNS_SERVERS` 值 |
+|---|---|
+| Google DNS | `8.8.8.8,8.8.4.4` |
+| Cloudflare DNS | `1.1.1.1,1.0.0.1` |
+| 混合 | `8.8.8.8,1.1.1.1` |
+
+## 六、运维命令
 
 ```bash
 docker exec nanako-node nanako-node x25519                 # 生成 REALITY 密钥对
@@ -168,11 +192,11 @@ docker exec nanako-node nanako-node version
 docker exec nanako-node cat /etc/nanako-node/config.json   # 查看生成的配置
 ```
 
-## 六、强节点本机编译(可选)
+## 七、强节点本机编译(可选)
 
 用 `docker-compose.build.yml`(`build:` 而非 `image:`),或 Coolify 选 Dockerfile 构建包。弱节点别用。
 
-## 七、本地测试(非 Coolify)
+## 八、本地测试(非 Coolify)
 
 ```bash
 docker build -t nanako-node:full .
