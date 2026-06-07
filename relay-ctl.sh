@@ -63,15 +63,27 @@ EOF
 
 # ── 输入校验 ──
 
-validate_ip() {
-  local ip="$1"
-  if ! echo "$ip" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}$'; then
-    echo "[错误] 无效 IP: $ip"; return 1
+resolve_host() {
+  local host="$1"
+  if echo "$host" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}$'; then
+    local IFS='.'; set -- $host
+    for octet in "$@"; do
+      [ "$octet" -le 255 ] 2>/dev/null || { echo "[错误] 无效 IP: $host" >&2; return 1; }
+    done
+    echo "$host"; return 0
   fi
-  local IFS='.'; set -- $ip
-  for octet in "$@"; do
-    [ "$octet" -le 255 ] 2>/dev/null || { echo "[错误] 无效 IP: $ip"; return 1; }
-  done
+  if ! echo "$host" | grep -qE '^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$'; then
+    echo "[错误] 无效地址: $host" >&2; return 1
+  fi
+  local resolved
+  resolved=$(getent hosts "$host" 2>/dev/null | awk '{print $1; exit}') \
+    || resolved=$(dig +short "$host" A 2>/dev/null | grep -E '^[0-9.]+$' | head -1) \
+    || resolved=""
+  if [ -z "$resolved" ]; then
+    echo "[错误] 无法解析域名: $host" >&2; return 1
+  fi
+  echo "[信息] $host → $resolved" >&2
+  echo "$resolved"
 }
 
 validate_port() {
@@ -159,7 +171,10 @@ UNIT
 
 cmd_add() {
   local lport="$1" tip="$2" tport="$3" proto="${4:-both}"
-  validate_port "$lport" && validate_ip "$tip" && validate_port "$tport" && validate_proto "$proto" || exit 1
+  validate_port "$lport" && validate_port "$tport" && validate_proto "$proto" || exit 1
+  local resolved
+  resolved=$(resolve_host "$tip") || exit 1
+  tip="$resolved"
 
   local existing
   existing=$(read_rules)
