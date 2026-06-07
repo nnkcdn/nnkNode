@@ -24,7 +24,7 @@
 
 ## 二、Coolify 部署(弱节点,推荐)
 
-1. **New Resource → Docker Compose**,Source 选 `nnkNode` 仓库,用默认 `docker-compose.yml`(引用预编译镜像,不在节点上构建)。
+1. **New Resource → Docker Compose**,Source 选 `nnkNode` 仓库,用默认 `docker-compose.yaml`(引用预编译镜像,不在节点上构建)。
 2. **Environment Variables** 面板填变量(最少 4 个必填),见下方《协议配置模板》。
 3. **Deploy**。
 
@@ -194,7 +194,7 @@ docker exec nanako-node cat /etc/nanako-node/config.json   # 查看生成的配�
 
 ## 七、强节点本机编译(可选)
 
-用 `docker-compose.build.yml`(`build:` 而非 `image:`),或 Coolify 选 Dockerfile 构建包。弱节点别用。
+用 `docker-compose.build.yaml`(`build:` 而非 `image:`),或 Coolify 选 Dockerfile 构建包。弱节点别用。
 
 ## 八、本地测试(非 Coolify)
 
@@ -218,8 +218,8 @@ docker run --rm --network host \
 | `Dockerfile` | 多阶段、原生交叉编译、运行期下载 geo、内置 HEALTHCHECK |
 | `docker-entrypoint.sh` | 环境变量 → `config.json`,再启动 server |
 | `healthcheck.sh` | 进程 + 可选端口健康检查 |
-| `docker-compose.yml` | Coolify:预编译镜像(弱节点默认) |
-| `docker-compose.build.yml` | Coolify:本机构建(强节点) |
+| `docker-compose.yaml` | Coolify:预编译镜像(弱节点默认) |
+| `docker-compose.build.yaml` | Coolify:本机构建(强节点) |
 | `.github/workflows/build.yml` | CI:多架构编译并推 GHCR |
 | `.env.example` | 全部环境变量 |
 | `src/` | vendored V2bX 源码(CI 编译用) |
