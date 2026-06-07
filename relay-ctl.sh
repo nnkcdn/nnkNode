@@ -34,7 +34,7 @@ ensure_forward() {
 ensure_config() {
   mkdir -p "$CONF_DIR"
   if [ ! -f "$CONF_FILE" ]; then
-    printf '# relay-ctl rules\n# ID:LOCAL_PORT:TARGET_IP:TARGET_PORT:PROTOCOL\n' > "$CONF_FILE"
+    printf '# relay-ctl rules\n# ID:LOCAL_PORT:RESOLVED_IP:TARGET_PORT:PROTOCOL:ORIGINAL_HOST\n' > "$CONF_FILE"
   fi
 }
 
@@ -46,14 +46,14 @@ read_rules() {
 
 save_config() {
   local tmp="$CONF_FILE.tmp.$$"
-  printf '# relay-ctl rules\n# ID:LOCAL_PORT:TARGET_IP:TARGET_PORT:PROTOCOL\n' > "$tmp"
+  printf '# relay-ctl rules\n# ID:LOCAL_PORT:RESOLVED_IP:TARGET_PORT:PROTOCOL:ORIGINAL_HOST\n' > "$tmp"
   printf '%s\n' "$1" >> "$tmp"
   mv -f "$tmp" "$CONF_FILE"
 }
 
 next_id() {
   local max=0 id
-  while IFS=: read -r id _ _ _ _; do
+  while IFS=: read -r id _ _ _ _ _; do
     [ "$id" -gt "$max" ] 2>/dev/null && max="$id"
   done <<EOF
 $(read_rules)
@@ -170,15 +170,14 @@ UNIT
 # ── CRUD 操作 ──
 
 cmd_add() {
-  local lport="$1" tip="$2" tport="$3" proto="${4:-both}"
+  local lport="$1" orig_host="$2" tport="$3" proto="${4:-both}"
   validate_port "$lport" && validate_port "$tport" && validate_proto "$proto" || exit 1
-  local resolved
-  resolved=$(resolve_host "$tip") || exit 1
-  tip="$resolved"
+  local tip
+  tip=$(resolve_host "$orig_host") || exit 1
 
   local existing
   existing=$(read_rules)
-  while IFS=: read -r _ ep _ _ eproto; do
+  while IFS=: read -r _ ep _ _ eproto _; do
     [ -z "$ep" ] && continue
     if [ "$ep" = "$lport" ]; then
       if [ "$eproto" = "both" ] || [ "$proto" = "both" ] || [ "$eproto" = "$proto" ]; then
@@ -195,13 +194,14 @@ EOF
   if apply_iptables "$proto" "$lport" "$tip" "$tport" "$rid"; then
     local new_rules
     new_rules=$(read_rules)
+    local entry="${rid}:${lport}:${tip}:${tport}:${proto}:${orig_host}"
     if [ -n "$new_rules" ]; then
-      save_config "$(printf '%s\n%s' "$new_rules" "${rid}:${lport}:${tip}:${tport}:${proto}")"
+      save_config "$(printf '%s\n%s' "$new_rules" "$entry")"
     else
-      save_config "${rid}:${lport}:${tip}:${tport}:${proto}"
+      save_config "$entry"
     fi
     install_persistence
-    echo "[成功] #${rid}: 0.0.0.0:${lport} → ${tip}:${tport} (${proto})"
+    echo "[成功] #${rid}: 0.0.0.0:${lport} → ${orig_host}(${tip}):${tport} (${proto})"
   else
     echo "[错误] iptables 规则添加失败"; exit 1
   fi
@@ -213,11 +213,12 @@ cmd_list() {
   if [ -z "$rules" ]; then
     echo "当前没有中转规则"; return
   fi
-  printf '%-4s  %-8s  %-18s  %-8s  %-6s\n' "ID" "本地端口" "目标地址" "目标端口" "协议"
-  printf '%-4s  %-8s  %-18s  %-8s  %-6s\n' "---" "------" "----------------" "------" "----"
-  while IFS=: read -r id lp tip tp pr; do
+  printf '%-4s  %-8s  %-24s  %-18s  %-8s  %-6s\n' "ID" "本地端口" "目标地址" "解析 IP" "目标端口" "协议"
+  printf '%-4s  %-8s  %-24s  %-18s  %-8s  %-6s\n' "---" "------" "--------------------" "----------------" "------" "----"
+  while IFS=: read -r id lp tip tp pr host; do
     [ -z "$id" ] && continue
-    printf '%-4s  %-8s  %-18s  %-8s  %-6s\n' "$id" "$lp" "$tip" "$tp" "$pr"
+    host="${host:-$tip}"
+    printf '%-4s  %-8s  %-24s  %-18s  %-8s  %-6s\n' "$id" "$lp" "$host" "$tip" "$tp" "$pr"
   done <<EOF
 $rules
 EOF
@@ -229,13 +230,13 @@ cmd_del() {
 
   local rules found=0 new_rules=""
   rules=$(read_rules)
-  while IFS=: read -r id lp tip tp pr; do
+  while IFS=: read -r id lp tip tp pr host; do
     [ -z "$id" ] && continue
     if [ "$id" = "$rid" ]; then
       found=1
     else
       new_rules="${new_rules:+${new_rules}
-}${id}:${lp}:${tip}:${tp}:${pr}"
+}${id}:${lp}:${tip}:${tp}:${pr}:${host:-$tip}"
     fi
   done <<EOF
 $rules
@@ -254,7 +255,7 @@ cmd_restore() {
   rules=$(read_rules)
   [ -z "$rules" ] && { echo "[信息] 配置为空, 无需恢复"; return; }
   ensure_forward
-  while IFS=: read -r id lp tip tp pr; do
+  while IFS=: read -r id lp tip tp pr _; do
     [ -z "$id" ] && continue
     if apply_iptables "$pr" "$lp" "$tip" "$tp" "$id"; then
       count=$((count + 1))
@@ -270,7 +271,7 @@ EOF
 cmd_flush() {
   local rules
   rules=$(read_rules)
-  while IFS=: read -r id _ _ _ _; do
+  while IFS=: read -r id _ _ _ _ _; do
     [ -z "$id" ] && continue
     remove_iptables "$id"
   done <<EOF
@@ -278,6 +279,35 @@ $rules
 EOF
   save_config ""
   echo "[成功] 已清空所有中转规则"
+}
+
+cmd_refresh() {
+  local rules new_rules="" count=0
+  rules=$(read_rules)
+  [ -z "$rules" ] && { echo "[信息] 配置为空, 无需刷新"; return; }
+  while IFS=: read -r id lp tip tp pr host; do
+    [ -z "$id" ] && continue
+    host="${host:-$tip}"
+    local new_ip
+    new_ip=$(resolve_host "$host" 2>/dev/null) || { new_ip="$tip"; echo "[警告] #${id} 解析 $host 失败, 保持 $tip"; }
+    if [ "$new_ip" != "$tip" ]; then
+      remove_iptables "$id"
+      if apply_iptables "$pr" "$lp" "$new_ip" "$tp" "$id"; then
+        echo "[更新] #${id}: $host $tip → $new_ip"
+        count=$((count + 1))
+      else
+        echo "[错误] #${id} 更新 iptables 失败, 保持 $tip"
+        new_ip="$tip"
+        apply_iptables "$pr" "$lp" "$tip" "$tp" "$id" 2>/dev/null
+      fi
+    fi
+    new_rules="${new_rules:+${new_rules}
+}${id}:${lp}:${new_ip}:${tp}:${pr}:${host}"
+  done <<EOF
+$rules
+EOF
+  save_config "$new_rules"
+  echo "[完成] 刷新 ${count} 条规则"
 }
 
 cmd_status() {
@@ -298,13 +328,15 @@ cmd_status() {
 show_menu() {
   while true; do
     echo ""
+    echo ""
     echo "========== 中转管理 (relay-ctl) =========="
     echo "  1) 添加中转规则"
     echo "  2) 查看所有规则"
     echo "  3) 删除规则"
-    echo "  4) 重新加载规则"
-    echo "  5) 清空所有规则"
-    echo "  6) 查看状态"
+    echo "  4) 刷新 DNS (重新解析域名)"
+    echo "  5) 重新加载规则"
+    echo "  6) 清空所有规则"
+    echo "  7) 查看状态"
     echo "  0) 退出"
     echo "=========================================="
     printf "请选择: "
@@ -312,7 +344,7 @@ show_menu() {
     case "$choice" in
       1)
         printf "本地端口: "; read -r lp
-        printf "目标 IP:  "; read -r tip
+        printf "目标地址 (IP/域名): "; read -r tip
         printf "目标端口: "; read -r tp
         printf "协议 [tcp/udp/both, 默认 both]: "; read -r pr
         cmd_add "$lp" "$tip" "$tp" "${pr:-both}" || true
@@ -323,12 +355,13 @@ show_menu() {
         printf "要删除的规则 ID: "; read -r rid
         [ -n "$rid" ] && { cmd_del "$rid" || true; }
         ;;
-      4) cmd_restore || true ;;
-      5)
+      4) cmd_refresh || true ;;
+      5) cmd_restore || true ;;
+      6)
         printf "确认清空所有规则? [y/N]: "; read -r yn
         case "$yn" in y|Y) cmd_flush ;; *) echo "已取消" ;; esac
         ;;
-      6) cmd_status ;;
+      7) cmd_status ;;
       0) exit 0 ;;
       *) echo "[错误] 无效选项" ;;
     esac
@@ -341,17 +374,22 @@ usage() {
   cat <<'USAGE'
 用法:
   relay-ctl.sh                                         交互式菜单
-  relay-ctl.sh add  <本地端口> <目标IP> <目标端口> [tcp|udp|both]
+  relay-ctl.sh add  <本地端口> <目标地址> <目标端口> [tcp|udp|both]
   relay-ctl.sh list                                    列出所有规则
   relay-ctl.sh del  <规则ID>                           删除规则
+  relay-ctl.sh refresh                                 重新解析所有域名并更新规则
   relay-ctl.sh restore                                 从配置恢复规则 (开机用)
   relay-ctl.sh flush                                   清空所有规则
   relay-ctl.sh status                                  查看状态
 
+目标地址支持 IP 和域名, 域名在添加时自动解析为 IP.
+
 示例:
-  relay-ctl.sh add 443 1.2.3.4 443           # TCP+UDP 都转发
-  relay-ctl.sh add 19007 5.6.7.8 19007 udp   # 只转 UDP (Hysteria2)
-  relay-ctl.sh del 2                          # 删除规则 #2
+  relay-ctl.sh add 443 1.2.3.4 443              # TCP+UDP 都转发
+  relay-ctl.sh add 443 node.example.com 443      # 域名自动解析
+  relay-ctl.sh add 19007 5.6.7.8 19007 udp       # 只转 UDP (Hysteria2)
+  relay-ctl.sh del 2                             # 删除规则 #2
+  relay-ctl.sh refresh                           # 域名 IP 变了? 刷新
 USAGE
 }
 
@@ -369,6 +407,7 @@ main() {
       [ $# -lt 2 ] && { usage; exit 1; }
       cmd_del "$2"
       ;;
+    refresh) cmd_refresh ;;
     restore) cmd_restore ;;
     flush)   cmd_flush ;;
     status)  cmd_status ;;
