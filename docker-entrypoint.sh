@@ -61,18 +61,29 @@ if [ -n "$DNS_SERVERS" ]; then
     sing)
       # sing-box OriginalPath 格式: 完整 options, 只填 dns 段
       # 支持: 纯 IP (自动加 udp://) 或带协议前缀 (https:// tls:// quic:// tcp:// udp://)
+      # DoH/DoT/DoQ 含域名时自动添加 bootstrap resolver (udp://8.8.8.8)
       SING_DNS_FILE="$DNS_DIR/sing-dns.json"
-      idx=0
+      need_bootstrap=0
       printf '%s' "$DNS_SERVERS" | tr ',' '\n' | while IFS= read -r addr; do
-        idx=$((idx+1))
+        case "$addr" in https://*|tls://*|quic://*) need_bootstrap=1 ;; esac
+      done
+      # 重新检测 (subshell 变量不传递)
+      case "$DNS_SERVERS" in *https://*|*tls://*|*quic://*) need_bootstrap=1 ;; *) need_bootstrap=0 ;; esac
+
+      printf '%s' "$DNS_SERVERS" | tr ',' '\n' | while IFS= read -r addr; do
         case "$addr" in
           https://*|tls://*|quic://*|tcp://*|udp://*) printf '%s\n' "$addr" ;;
           *) printf 'udp://%s\n' "$addr" ;;
         esac
-      done | jq -R --argjson idx 0 \
-        '{ tag: ("dns-\(input_line_number)"), address: . }' | \
-        jq -s '{dns:{servers:.,rules:[],independent_cache:true}}' > "$SING_DNS_FILE"
-      echo "[entrypoint] 已生成 sing DNS 配置: $DNS_SERVERS"
+      done | jq -R '{ tag: ("dns-\(input_line_number)"), address: . }' | \
+        if [ "$need_bootstrap" = "1" ]; then
+          jq -s 'map(. + (if (.address | test("^(https|tls|quic)://")) then {address_resolver:"dns-bootstrap"} else {} end))
+                  + [{tag:"dns-bootstrap",address:"udp://8.8.8.8"}]
+                  | {dns:{servers:.,rules:[],independent_cache:true}}'
+        else
+          jq -s '{dns:{servers:.,rules:[],independent_cache:true}}'
+        fi > "$SING_DNS_FILE"
+      echo "[entrypoint] 已生成 sing DNS 配置: $DNS_SERVERS (bootstrap=$need_bootstrap)"
       ;;
   esac
 fi
