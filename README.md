@@ -192,11 +192,40 @@ docker exec nanako-node nanako-node version
 docker exec nanako-node cat /etc/nanako-node/config.json   # 查看生成的配置
 ```
 
-## 七、强节点本机编译(可选)
+## 七、端口中转（relay-ctl）
+
+中转服务器一键安装：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nnkcdn/nnkNode/main/relay-ctl.sh -o /usr/local/bin/relay-ctl && chmod +x /usr/local/bin/relay-ctl
+```
+
+交互式菜单：
+
+```bash
+relay-ctl                                           # 进入交互菜单
+```
+
+CLI 命令：
+
+```bash
+relay-ctl add 443 node.example.com 443              # TCP+UDP 转发（支持域名）
+relay-ctl add 19007 1.2.3.4 19007 udp               # 只转 UDP（Hysteria2）
+relay-ctl list                                       # 查看所有规则
+relay-ctl del 2                                      # 删除规则 #2
+relay-ctl refresh                                    # 域名 IP 变更后刷新
+relay-ctl status                                     # 查看状态
+relay-ctl flush                                      # 清空所有规则
+```
+
+> 使用 iptables DNAT+MASQUERADE 内核层转发，规则自动持久化（systemd 开机恢复）。
+
+## 八、强节点本机编译(可选)
+
 
 用 `docker-compose.build.yaml`(`build:` 而非 `image:`),或 Coolify 选 Dockerfile 构建包。弱节点别用。
 
-## 八、本地测试(非 Coolify)
+## 九、本地测试(非 Coolify)
 
 ```bash
 docker build -t nanako-node:full .
@@ -221,5 +250,6 @@ docker run --rm --network host \
 | `docker-compose.yaml` | Coolify:预编译镜像(弱节点默认) |
 | `docker-compose.build.yaml` | Coolify:本机构建(强节点) |
 | `.github/workflows/build.yml` | CI:多架构编译并推 GHCR |
+| `relay-ctl.sh` | 中转服务器端口转发管理脚本 |
 | `.env.example` | 全部环境变量 |
 | `src/` | vendored V2bX 源码(CI 编译用) |

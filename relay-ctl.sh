@@ -277,6 +277,11 @@ cmd_flush() {
   done <<EOF
 $rules
 EOF
+  # 清理孤立规则 (配置里没有但 iptables 里残留的)
+  if iptables -t nat -S 2>/dev/null | grep -q "relay-ctl"; then
+    iptables-save | grep -v "relay-ctl" | iptables-restore 2>/dev/null || true
+    echo "[信息] 已清理孤立的 iptables 规则"
+  fi
   save_config ""
   echo "[成功] 已清空所有中转规则"
 }
