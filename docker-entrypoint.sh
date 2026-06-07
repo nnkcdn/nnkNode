@@ -77,8 +77,8 @@ if [ -n "$DNS_SERVERS" ]; then
         esac
       done | jq -R '{ tag: ("dns-\(input_line_number)"), address: . }' | \
         if [ "$need_bootstrap" = "1" ]; then
-          jq -s 'map(. + (if (.address | test("^(https|tls|quic)://")) then {address_resolver:"dns-bootstrap"} else {} end))
-                  + [{tag:"dns-bootstrap",address:"udp://8.8.8.8"}]
+          jq -s '[{tag:"dns-bootstrap",address:"udp://8.8.8.8"}]
+                  + map(. + (if (.address | test("^(https|tls|quic)://")) then {address_resolver:"dns-bootstrap"} else {} end))
                   | {dns:{servers:.,rules:[],independent_cache:true}}'
         else
           jq -s '{dns:{servers:.,rules:[],independent_cache:true}}'
