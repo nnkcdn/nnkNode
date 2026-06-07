@@ -2,7 +2,7 @@
 
 基于 **V2bX**(多核:Xray + sing-box + Hysteria2)的节点后端,**全参数环境变量化**、**Coolify 友好**、**多架构预编译**。
 
-> 本仓库内容对应 GitHub 仓库 [`Nanako1900/nodeDeploy`](https://github.com/Nanako1900/nodeDeploy)。
+> 本仓库内容对应 GitHub 仓库 [`nnkcdn/nnkNode`](https://github.com/nnkcdn/nnkNode)。
 
 ## 工作原理(为什么弱节点不用编译)
 
@@ -12,21 +12,19 @@
         弱性能节点(Coolify) ◄── 只 docker pull 预编译镜像 ◄──┘   ← 零编译
 ```
 
-- **预编译**:`.github/workflows/build.yml` 每次 push 用 buildx 编译 `linux/amd64` + `linux/arm64`,推到 `ghcr.io/nanako1900/nodedeploy:latest`。
+- **预编译**:`.github/workflows/build.yml` 每次 push 用 buildx 编译 `linux/amd64` + `linux/arm64`,推到 `ghcr.io/nnkcdn/nnknode:latest`。
 - **弱节点**:Coolify 直接拉镜像运行,**不在节点上编译**(V2bX 多核编译要 ~2GB 内存,小鸡扛不住)。
 - **配置**:容器启动时 `docker-entrypoint.sh` 把环境变量渲染成 `config.json`,你**只填环境变量**。
 
 ## 一、首次准备
 
-1. 把本仓库推到 `github.com/Nanako1900/nodeDeploy`(`src/` 是 vendored 的 V2bX 源码,必须一起推,CI 要用它编译)。
+1. 把本仓库推到 `github.com/nnkcdn/nnkNode`(`src/` 是 vendored 的 V2bX 源码,必须一起推,CI 要用它编译)。
 2. push 后看仓库 **Actions** 跑完,镜像出现在仓库 **Packages**。
-3. ⚠️ 仓库是私有的,默认 GHCR 包也是私有 → 二选一:
-   - 到 GHCR 把该 package 设为 **Public**(Packages → 包 → Package settings → Change visibility);**或**
-   - 在 Coolify 加一个 GHCR 的 registry 凭据(用户名 `Nanako1900` + 一个 `read:packages` 的 PAT)。
+3. GHCR 包首次发布默认是私有 → 打开 https://github.com/users/nnkcdn/packages/container/nnknode/settings ,拉到底把可见性改成 **Public**(只需一次)。仓库本身是公开的,包设为 Public 后**所有服务器都能匿名拉取,Coolify 无需任何登录凭据**。
 
 ## 二、Coolify 部署(弱节点,推荐)
 
-1. **New Resource → Docker Compose**,Source 选 `nodeDeploy` 仓库,用默认 `docker-compose.yml`(引用预编译镜像,不在节点上构建)。
+1. **New Resource → Docker Compose**,Source 选 `nnkNode` 仓库,用默认 `docker-compose.yml`(引用预编译镜像,不在节点上构建)。
 2. **Environment Variables** 面板填变量(最少 4 个必填),见下方《协议配置模板》。
 3. **Deploy**。
 

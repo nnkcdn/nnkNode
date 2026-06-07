@@ -9,7 +9,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: nanako1900/nodedeploy   # GHCR 必须小写
+  IMAGE_NAME: nnkcdn/nnknode   # GHCR 必须小写
 
 jobs:
   build:
